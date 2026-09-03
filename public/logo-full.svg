@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 620" role="img" aria-label="SR Lucky Traders">
+  <title>SR Lucky Traders</title>
+  <!--
+    The complete logo lock-up: cart mark plus the LUCKY TRADERS wordmark.
+    Used where the brand stands on its own (invoices, printed order slips,
+    the admin settings preview). The header uses logo.svg, the mark alone,
+    because the shop name already appears as text beside it.
+  -->
+  <defs>
+    <style>
+      .lt-blue { fill: #1A1AE6; }
+      .lt-blue-stroke { stroke: #1A1AE6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .lt-red { fill: #F51111; }
+      .lt-mono { fill: #FFFFFF; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; }
+      .lt-word { font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif; font-weight: 900; }
+    </style>
+  </defs>
+
+  <g>
+    <!-- Pixel trail -->
+    <rect class="lt-blue" x="26" y="150" width="34" height="34" rx="9" opacity=".55" />
+    <rect class="lt-blue" x="70" y="112" width="38" height="38" rx="10" opacity=".8" />
+    <rect class="lt-blue" x="70" y="188" width="38" height="38" rx="10" />
+
+    <!-- Handle -->
+    <path class="lt-blue-stroke" stroke-width="30" d="M104 130h34a26 26 0 0 1 26 26v182" />
+
+    <!-- Basket -->
+    <path class="lt-red" d="M196 148h206a22 22 0 0 1 21 28l-30 108a22 22 0 0 1-21 16H208a22 22 0 0 1-22-22V170a22 22 0 0 1 10-22z" />
+    <text class="lt-mono" x="300" y="272" font-size="132" text-anchor="middle">SR</text>
+
+    <!-- Rail and wheels -->
+    <path class="lt-blue-stroke" stroke-width="30" d="M164 338h222" />
+    <circle class="lt-red" cx="216" cy="404" r="34" />
+    <circle class="lt-red" cx="330" cy="404" r="34" />
+  </g>
+
+  <!-- Wordmark -->
+  <text class="lt-word lt-red" x="256" y="527" font-size="104" text-anchor="middle" letter-spacing="2">LUCKY</text>
+  <text class="lt-word lt-blue" x="256" y="592" font-size="58" text-anchor="middle" letter-spacing="9">TRADERS</text>
+</svg>
