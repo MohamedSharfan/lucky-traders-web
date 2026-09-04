@@ -11,3 +11,6 @@ next-env.d.ts
 
 # Locally generated secrets, never committed.
 admin-session-secret.txt
+
+# Scratch output from local test runs.
+.tmp

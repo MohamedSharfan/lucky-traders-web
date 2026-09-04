@@ -9,7 +9,18 @@
  * URL; either way it proves the Supabase project behind it.
  */
 
+import { loadEnv } from './load-env.mjs';
+
 const BASE = process.argv[2] ?? 'http://localhost:3000';
+
+await loadEnv();
+
+// The suite signs in with whatever owner account the server is actually
+// configured with, so it keeps working once the shop owner sets a real
+// password. Hard-coding the sample credentials made every admin check fail
+// against a properly configured deployment.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? 'admin@luckytraders.lk').trim().toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'change-this-password';
 
 let pass = 0;
 let fail = 0;
@@ -176,7 +187,7 @@ async function main() {
   const login = await fetch(BASE + '/api/admin/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'admin@luckytraders.lk', password: 'change-this-password' }),
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
   });
   const H = { 'Content-Type': 'application/json', Cookie: (login.headers.get('set-cookie') ?? '').split(';')[0] };
   ok(login.status === 200, 'owner login');
@@ -184,7 +195,7 @@ async function main() {
     (await fetch(BASE + '/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'admin@luckytraders.lk', password: 'wrong' }),
+      body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD + '-wrong' }),
     })).status === 401,
     'wrong password rejected',
   );

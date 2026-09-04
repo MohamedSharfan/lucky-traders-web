@@ -51,7 +51,17 @@ export function serviceClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error('Supabase is not configured');
-  client = createClient(url, key, { auth: { persistSession: false } });
+  client = createClient(url, key, {
+    auth: { persistSession: false },
+    // Next patches global fetch and caches GET requests by default, which
+    // silently applies to every PostgREST read supabase-js makes. That turned
+    // the admin panel into a lie: settings and catalog edits saved correctly
+    // but the storefront kept serving the value from the first request. The
+    // database is the source of truth, so its reads are never cached.
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
+    },
+  });
   return client;
 }
 

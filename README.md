@@ -21,7 +21,7 @@ npm run dev
 ```
 
 Full walkthrough in [Setting up Supabase](#setting-up-supabase) below - create a
-project, run `supabase/schema.sql`, run `supabase/seed.sql`, paste three keys.
+project, run `supabase/schema.sql`, paste three keys, then `npm run seed`.
 
 Once it is up, <http://localhost:3000> shows the shop with 293 demo products
 across 21 categories, and <http://localhost:3000/admin> is the admin panel.
@@ -52,11 +52,7 @@ instead. `GET /api/health` reports exactly which part is wrong.
    indexes, Row Level Security policies, the storage bucket, and the stock
    reservation functions. It is idempotent, so re-running it is safe.
 
-3. **SQL Editor -> run `supabase/seed.sql`** to load the demo catalog: 21
-   categories, 63 brands, 293 products. Regenerate it any time with
-   `npm run seed:sql`. Also idempotent - every statement upserts on its slug.
-
-4. **Project Settings -> API** gives you three values for `.env.local`:
+3. **Project Settings -> API** gives you three values for `.env.local`:
 
    ```ini
    NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
@@ -64,7 +60,7 @@ instead. `GET /api/health` reports exactly which part is wrong.
    SUPABASE_SERVICE_ROLE_KEY=<service_role key — server only>
    ```
 
-5. Set the admin variables too:
+4. Set the admin variables too:
 
    ```ini
    ADMIN_EMAIL=you@example.com
@@ -75,6 +71,14 @@ instead. `GET /api/health` reports exactly which part is wrong.
    ```bash
    node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
    ```
+
+5. **`npm run seed`** loads the demo catalog into your project: 123 categories,
+   63 brands, 293 products. Every row upserts on its slug, so re-running
+   refreshes the demo catalog without duplicating it and without touching real
+   orders.
+
+   `supabase/seed.sql` does the same thing if you would rather paste SQL into
+   the dashboard editor; regenerate it with `npm run seed:sql`.
 
 6. `npm run dev`, then `npm run test:e2e` in a second terminal. That runs 73
    end-to-end checks against your project and is the fastest way to confirm the
@@ -333,7 +337,8 @@ npm run build            # production build
 npm run start            # run the production build
 npm run typecheck        # TypeScript, no emit
 npm run lint             # ESLint
-npm run test:e2e         # 63-check regression suite against a running server
+npm run test:e2e         # 73-check regression suite against a running server
+npm run seed             # load the demo catalog into Supabase
 npm run seed:sql         # regenerate supabase/seed.sql from the demo catalog
 ```
 
@@ -376,7 +381,7 @@ Common answers:
 | `Supabase is not configured` | Variables missing for that environment; add them and redeploy |
 | Cannot reach the project | Free projects pause after inactivity - open the dashboard to resume |
 | `relation ... does not exist` | `supabase/schema.sql` has not been run |
-| `productCount: 0` | Schema is there but `supabase/seed.sql` has not been run |
+| `productCount: 0` | Schema is there but the catalog has not been loaded - run `npm run seed` |
 
 ---
 
