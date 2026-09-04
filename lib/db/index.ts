@@ -44,11 +44,23 @@ export async function getDb(): Promise<DataStore> {
 
   try {
     const { sqliteStore } = await import('./sqlite');
-    // Touching the store here surfaces a missing native binary now, while we
-    // can still fall back, rather than on the first customer's page view.
+    // Touching the store here surfaces a problem now, while we can still react,
+    // rather than on the first customer's page view.
     await sqliteStore.getSettings();
     resolved = sqliteStore;
   } catch (error) {
+    const { isConfigurationError } = await import('./errors');
+
+    // A read-only filesystem defeats the JSON store too, so falling back would
+    // only swap one unexplained crash for another. Surface the real problem —
+    // the message names the exact environment variables to set.
+    if (isConfigurationError(error)) {
+      console.error(`\n[db] ${(error as Error).message}\n`);
+      throw error;
+    }
+
+    // Anything else (for example a machine with no prebuilt libSQL binary) is
+    // genuinely recoverable: the JSON store holds the same data.
     console.error(
       '[db] SQLite is unavailable, falling back to the JSON store. Set DATA_BACKEND=json to silence this.',
       error,

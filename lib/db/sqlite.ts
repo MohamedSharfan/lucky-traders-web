@@ -31,6 +31,7 @@ import {
   toProductView,
 } from './shared';
 import { MIGRATION_STATEMENTS, SCHEMA_STATEMENTS } from './sqlite-schema';
+import { StorageUnavailableError } from './errors';
 import { computeStats, resolveDeliveryFee } from './local';
 
 /**
@@ -55,17 +56,41 @@ async function connect(): Promise<Client> {
   if (ready) return ready;
 
   ready = (async () => {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    // A hosted libSQL/Turso database needs no local disk at all, so the data
+    // directory is only created when we are actually going to write a file
+    // there. Creating it unconditionally breaks an otherwise-correct hosted
+    // deployment on a read-only filesystem.
+    const remoteUrl = process.env.TURSO_DATABASE_URL?.trim();
+    const authToken = process.env.TURSO_AUTH_TOKEN?.trim() || undefined;
 
-    // A file: URL keeps this entirely local. Point TURSO_DATABASE_URL at a
-    // hosted libSQL instance later and the same code works unchanged.
-    const url = process.env.TURSO_DATABASE_URL || `file:${DB_FILE.replace(/\\/g, '/')}`;
-    const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
+    let url: string;
+    if (remoteUrl) {
+      url = remoteUrl;
+    } else {
+      try {
+        await fs.mkdir(DATA_DIR, { recursive: true });
+      } catch (error) {
+        throw new StorageUnavailableError(
+          `cannot create ${DATA_DIR} (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
+      url = `file:${DB_FILE.replace(/\\/g, '/')}`;
+    }
 
     const db = createClient({ url, authToken });
 
-    for (const statement of SCHEMA_STATEMENTS) {
-      await db.execute(statement);
+    try {
+      for (const statement of SCHEMA_STATEMENTS) {
+        await db.execute(statement);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // libSQL reports an unwritable file as ConnectionFailed rather than a
+      // filesystem error, so match on that too.
+      if (!remoteUrl && /ConnectionFailed|unable to open|readonly|EROFS|EACCES/i.test(message)) {
+        throw new StorageUnavailableError(`cannot open ${DB_FILE} (${message})`);
+      }
+      throw error;
     }
 
     // Bring older databases up to date. These throw when already applied,

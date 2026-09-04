@@ -355,20 +355,46 @@ terminal.
 
 ## Deploying
 
-Any Node host works; Vercel is the simplest.
+The right host depends on one thing: **whether the filesystem is writable.**
 
-1. Push the repository.
-2. Set the environment variables from `.env.example` — Supabase keys,
-   `ADMIN_SESSION_SECRET`, and `ADMIN_EMAIL`/`ADMIN_PASSWORD` if you are not
-   using Supabase Auth.
-3. Deploy.
+### Serverless (Vercel, Netlify) — use a hosted database
 
-**One caveat for serverless hosts** (Vercel, Netlify): their filesystems are
-ephemeral, so a local SQLite file does not survive a redeploy there. Either
-deploy to a host with a real disk (a VPS, Railway, Fly.io, or a Raspberry Pi in
-the shop), or point `TURSO_DATABASE_URL` at a hosted libSQL database — its free
-tier is generous and it does not pause. On a normal server, the local file is
-the simplest and cheapest option and needs nothing else.
+Their project directories are read-only, so the built-in SQLite file cannot be
+created and the app will refuse to start. Point it at a hosted libSQL database
+instead — free, and unlike a paused Postgres project it stays awake:
+
+1. Create a database at [turso.tech](https://turso.tech) and copy its URL and
+   auth token.
+2. In your host's environment variables, set:
+   ```ini
+   TURSO_DATABASE_URL=libsql://your-db-name.turso.io
+   TURSO_AUTH_TOKEN=your-token
+   ADMIN_SESSION_SECRET=<a long random string>
+   ADMIN_EMAIL=you@example.com
+   ADMIN_PASSWORD=<a real password>
+   ```
+   Generate the secret with:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+   ```
+3. Deploy. The catalog seeds itself into the hosted database on first boot.
+
+Supabase works the same way — set the three `SUPABASE_*` variables after running
+`supabase/schema.sql`, and it takes precedence over libSQL.
+
+### A host with a real disk — nothing to configure
+
+Railway, Fly.io, Render with a disk, a VPS, or a Raspberry Pi in the shop: the
+local SQLite file works as-is. Set `ADMIN_SESSION_SECRET`, `ADMIN_EMAIL` and
+`ADMIN_PASSWORD`, and make sure `.data/` is on persistent storage rather than a
+container layer that is wiped on redeploy.
+
+### If it fails to start
+
+The server log names the exact problem and the variables to set. A generic
+"Application error: a server-side exception has occurred" in the browser with no
+detail means the log is where to look — Vercel shows it under the deployment's
+Functions tab.
 
 ---
 
