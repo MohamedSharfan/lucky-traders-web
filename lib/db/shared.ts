@@ -1,11 +1,13 @@
 import type {
   Brand,
   Category,
+  DashboardStats,
   Order,
   Product,
   ProductQuery,
   ProductSort,
   ProductView,
+  Settings,
   StockStatus,
 } from '@/lib/types';
 
@@ -288,4 +290,86 @@ export function slugify(input: string): string {
     .replace(/[^a-z0-9඀-෿஀-௿]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 90) || 'item';
+}
+
+// ---------------------------------------------------------------------------
+// Helpers shared by every adapter. These live here rather than in an adapter
+// so that removing or adding a backend never moves business logic with it.
+// ---------------------------------------------------------------------------
+
+/** Area-specific fee, free-delivery threshold, then the default fee. */
+export function resolveDeliveryFee(settings: Settings, area: string, subtotal: number): number {
+  if (!settings.delivery_enabled) return 0;
+  if (settings.free_delivery_threshold > 0 && subtotal >= settings.free_delivery_threshold) return 0;
+  const match = settings.delivery_areas?.find(
+    (a) => a.is_active && a.name.toLowerCase() === area.trim().toLowerCase(),
+  );
+  return match ? match.fee : settings.delivery_fee;
+}
+
+export function computeStats(orders: Order[], products: Product[], categories: Category[]): DashboardStats {
+  const today = new Date().toISOString().slice(0, 10);
+  const counted = orders.filter((o) => o.status !== 'cancelled');
+  const todays = counted.filter((o) => o.created_at.slice(0, 10) === today);
+
+  const salesByDay: DashboardStats['salesByDay'] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    const dayOrders = counted.filter((o) => o.created_at.slice(0, 10) === key);
+    salesByDay.push({
+      date: key,
+      total: dayOrders.reduce((s, o) => s + o.total, 0),
+      orders: dayOrders.length,
+    });
+  }
+
+  const productTotals = new Map<string, { name: string; quantity: number; revenue: number }>();
+  const categoryTotals = new Map<string, number>();
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const productById = new Map(products.map((p) => [p.id, p]));
+
+  for (const order of counted) {
+    for (const item of order.items) {
+      const entry = productTotals.get(item.product_name) ?? { name: item.product_name, quantity: 0, revenue: 0 };
+      entry.quantity += item.quantity;
+      entry.revenue += item.total;
+      productTotals.set(item.product_name, entry);
+
+      const product = item.product_id ? productById.get(item.product_id) : undefined;
+      const cat = product ? categoryById.get(product.category_id) : undefined;
+      if (cat) categoryTotals.set(cat.name, (categoryTotals.get(cat.name) ?? 0) + item.total);
+    }
+  }
+
+  return {
+    todaySales: todays.reduce((s, o) => s + o.total, 0),
+    todayOrders: todays.length,
+    pendingOrders: orders.filter((o) => ['new', 'confirmed', 'preparing', 'ready'].includes(o.status)).length,
+    totalProducts: products.filter((p) => p.is_active).length,
+    lowStockCount: products.filter((p) => p.stock > 0 && p.stock <= (p.low_stock_threshold || 10)).length,
+    outOfStockCount: products.filter((p) => p.stock <= 0).length,
+    totalCustomers: new Set(orders.map((o) => o.phone)).size,
+    salesByDay,
+    topProducts: [...productTotals.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 8),
+    categoryPerformance: [...categoryTotals.entries()]
+      .map(([name, revenue]) => ({ name, revenue }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 6),
+  };
+}
+
+/**
+ * Slug base for a new product: "<brand> <name> <unit>", skipping the unit when
+ * the name already ends with it (so "Cinnamon 100g" does not become
+ * "cinnamon-100g-100g").
+ */
+export function buildSlugBase(brand: string | undefined, name: string, unit?: string): string {
+  const parts = [brand, name];
+  const trimmedUnit = (unit ?? '').trim();
+  if (trimmedUnit && !name.trim().toLowerCase().endsWith(trimmedUnit.toLowerCase())) {
+    parts.push(trimmedUnit);
+  }
+  return parts.filter(Boolean).join(' ');
 }

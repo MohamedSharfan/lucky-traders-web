@@ -17,15 +17,13 @@ import type {
 /**
  * The single data-access contract used by every server route and page.
  *
- * Three implementations exist and are chosen at runtime by `lib/db/index.ts`:
- *   - `sqlite.ts`    the default: one local SQLite file, free and permanent
- *   - `supabase.ts`  Supabase / Postgres, used as soon as env vars are present
- *   - `local.ts`     a plain JSON file, kept as a dependency-free fallback
- *
- * Nothing above this layer knows which one is active.
+ * One implementation backs it: `supabase.ts`. The interface is kept because it
+ * documents the whole data surface in one place and keeps every query behind a
+ * single seam - but there is deliberately no second backend to silently fall
+ * back to.
  */
 export interface DataStore {
-  readonly kind: 'local' | 'sqlite' | 'supabase';
+  readonly kind: 'supabase';
 
   // -- catalog ---------------------------------------------------------------
   listCategories(opts?: { includeInactive?: boolean }): Promise<Category[]>;

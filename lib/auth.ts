@@ -81,7 +81,17 @@ export function requireSession(): AdminSession {
   return session;
 }
 
-/** Verifies credentials against Supabase Auth, or the env fallback. */
+/**
+ * Verifies admin credentials.
+ *
+ * The environment account is checked FIRST and always works. That ordering
+ * matters: Supabase Auth requires both an auth user and a matching row in
+ * `admins`, so checking it first would lock the owner out of a fresh
+ * deployment before they could create either.
+ *
+ * Supabase Auth is then tried for additional staff accounts created in
+ * Admin -> Admin Users.
+ */
 export async function verifyCredentials(
   email: string,
   password: string,
@@ -89,8 +99,28 @@ export async function verifyCredentials(
   const cleanEmail = email.trim().toLowerCase();
   if (!cleanEmail || !password) return null;
 
+  // --- the owner account, from the environment -----------------------------
+  const envEmail = envAdminEmail();
+  const envPassword = process.env.ADMIN_PASSWORD ?? '';
+  if (envPassword) {
+    const emailOk = crypto.timingSafeEqual(
+      Buffer.from(cleanEmail.padEnd(64).slice(0, 64)),
+      Buffer.from(envEmail.padEnd(64).slice(0, 64)),
+    );
+    const passwordOk = crypto.timingSafeEqual(
+      Buffer.from(password.padEnd(64).slice(0, 64)),
+      Buffer.from(envPassword.padEnd(64).slice(0, 64)),
+    );
+    if (emailOk && passwordOk) {
+      return { email: envEmail, name: 'Shop Owner', role: 'owner' };
+    }
+  }
+
+  // --- additional staff, via Supabase Auth ---------------------------------
   const { isSupabaseConfigured } = await import('@/lib/db');
-  if (isSupabaseConfigured() && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  if (!isSupabaseConfigured() || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null;
+
+  try {
     const { createClient } = await import('@supabase/supabase-js');
     const sb = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -100,7 +130,8 @@ export async function verifyCredentials(
     const { data, error } = await sb.auth.signInWithPassword({ email: cleanEmail, password });
     if (error || !data.user) return null;
 
-    // Being an auth user is not enough - the account must be listed as an admin.
+    // Being an auth user is not enough - the account must also be listed as an
+    // admin, so revoking access is a single row delete.
     const { serviceClient } = await import('@/lib/db/supabase');
     const admin = await serviceClient()
       .from('admins')
@@ -112,32 +143,13 @@ export async function verifyCredentials(
     return {
       email: cleanEmail,
       name: (admin.data.name as string) ?? cleanEmail,
-      role: ((admin.data.role as AdminSession['role']) ?? 'manager'),
+      role: (admin.data.role as AdminSession['role']) ?? 'manager',
     };
+  } catch (error) {
+    // An unreachable project must not look like a wrong password.
+    console.error('[auth] Supabase sign-in failed', error);
+    return null;
   }
-
-  // Local mode: the owner account comes from the environment, and any extra
-  // admins created in Admin -> Admin Users are stored with scrypt hashes.
-  const envEmail = (process.env.ADMIN_EMAIL ?? 'admin@luckytraders.lk').trim().toLowerCase();
-  const envPassword = process.env.ADMIN_PASSWORD ?? 'change-this-password';
-  const emailOk = crypto.timingSafeEqual(
-    Buffer.from(cleanEmail.padEnd(64).slice(0, 64)),
-    Buffer.from(envEmail.padEnd(64).slice(0, 64)),
-  );
-  const passwordOk = crypto.timingSafeEqual(
-    Buffer.from(password.padEnd(64).slice(0, 64)),
-    Buffer.from(envPassword.padEnd(64).slice(0, 64)),
-  );
-  if (emailOk && passwordOk) {
-    return { email: envEmail, name: 'Shop Owner', role: 'owner' };
-  }
-
-  const { getDb } = await import('@/lib/db');
-  const db = await getDb();
-  const stored = await db.verifyAdminPassword(cleanEmail, password);
-  if (stored) return { email: stored.email, name: stored.name, role: stored.role };
-
-  return null;
 }
 
 /** The email of the environment-defined owner account, for display purposes. */

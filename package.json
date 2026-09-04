@@ -8,14 +8,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "node scripts/seed-local.mjs",
     "seed:sql": "node scripts/generate-sql.mjs",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "node scripts/regression.mjs",
-    "export:turso": "node scripts/export-turso.mjs"
+    "test:e2e": "node scripts/regression.mjs"
   },
   "dependencies": {
-    "@libsql/client": "^0.18.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "next": "14.2.15",

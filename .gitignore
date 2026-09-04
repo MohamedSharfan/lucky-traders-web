@@ -9,10 +9,5 @@ out
 next-env.d.ts
 .DS_Store
 
-# Database exports: these contain customer names, phone numbers,
-# addresses and hashed admin passwords.
-turso-export.sql
-*.db
-*.sqlite
-*.sqlite3
+# Locally generated secrets, never committed.
 admin-session-secret.txt

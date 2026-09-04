@@ -11,92 +11,84 @@ click-to-chat link — no WhatsApp Business API subscription required.
 
 ## Quick start
 
+This app runs on Supabase and needs a project before it will start. Setup is
+about five minutes:
+
 ```bash
 npm install
+cp .env.example .env.local     # then fill in the Supabase values
 npm run dev
 ```
 
-Open <http://localhost:3000>. The catalog (293 demo products across 21
-categories) seeds itself into a local SQLite database on first run — **no
-database setup, no signup, nothing to configure**.
+Full walkthrough in [Setting up Supabase](#setting-up-supabase) below - create a
+project, run `supabase/schema.sql`, run `supabase/seed.sql`, paste three keys.
 
-Admin panel: <http://localhost:3000/admin>
+Once it is up, <http://localhost:3000> shows the shop with 293 demo products
+across 21 categories, and <http://localhost:3000/admin> is the admin panel.
+Sign in with the `ADMIN_EMAIL` and `ADMIN_PASSWORD` you set.
 
-| | |
-|---|---|
-| Email | `admin@luckytraders.lk` |
-| Password | `change-this-password` |
-
-Both come from `.env.local`, which was created for you from `.env.example`
-with a random `ADMIN_SESSION_SECRET` already filled in. **Change the email and
-password before deploying.**
+If a page errors, open <http://localhost:3000/api/health> - it names exactly
+which piece is missing rather than making you guess.
 
 ---
 
 ## How the data layer works
 
-The app talks to one interface, `DataStore` (`lib/db/types.ts`), and picks an
-implementation at runtime:
+Every query goes through one interface, `DataStore` (`lib/db/types.ts`), backed
+by a single adapter: `lib/db/supabase.ts`.
 
-| Condition | Adapter | Storage |
-|---|---|---|
-| default | `lib/db/sqlite.ts` | `.data/lucky-traders.db` |
-| `DATA_BACKEND=json` | `lib/db/local.ts` | `.data/store.json` |
-| Supabase env vars present | `lib/db/supabase.ts` | Supabase Postgres |
-
-Nothing above that layer knows which is active, so switching backends is an
-environment-variable change, not a rewrite.
-
-### SQLite is the default, and it is enough
-
-The shop runs on **one SQLite file**. That means:
-
-- **Free forever.** No subscription, no trial, no usage tier.
-- **Nothing to keep awake.** It cannot be paused or idled out the way a hosted
-  Postgres project can.
-- **No server process.** SQLite is a file, read and written in-process.
-- **Backups are a file copy.** `copy .data\lucky-traders.db somewhere-safe.db`
-  and you have the entire shop — products, orders, settings, admin accounts.
-- **Plenty fast.** SQLite comfortably handles a catalog far larger than a
-  grocery shop needs, with indexes on price, discount, category, brand and the
-  search column.
-
-It uses `@libsql/client`, which ships prebuilt binaries — so it installs on
-Windows without Visual Studio build tools. The schema (`lib/db/sqlite-schema.ts`)
-mirrors the Postgres one, generated columns included, so query behaviour matches
-whichever backend you run.
-
-If you ever outgrow one machine, the same adapter talks to a hosted libSQL /
-Turso database: set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. No code change.
-
-### Switching to Supabase (optional)
-
-1. Create a project at [supabase.com](https://supabase.com).
-2. SQL editor → run **`supabase/schema.sql`** (tables, indexes, RLS, storage
-   bucket, stock functions).
-3. Generate and run the demo catalog:
-   ```bash
-   npm run seed:sql          # writes supabase/seed.sql
-   ```
-   Paste `supabase/seed.sql` into the SQL editor. It is idempotent — safe to
-   re-run.
-4. Fill in `.env.local`:
-   ```ini
-   NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-   SUPABASE_SERVICE_ROLE_KEY=eyJ...     # server only, never commit
-   SUPABASE_STORAGE_BUCKET=product-images
-   ```
-5. Create your admin: Authentication → Users → add an email + password, then
-   in the SQL editor:
-   ```sql
-   insert into public.admins (email, name, role)
-   values ('owner@luckytraders.lk', 'Shop Owner', 'owner');
-   ```
-   Both the auth user **and** the `admins` row are required to sign in.
-6. Restart the dev server.
+There is deliberately **no local or file-based fallback**. A shop that quietly
+served a different database than the one it was pointed at would accept orders
+the owner never sees, so a misconfigured or unreachable project fails loudly
+instead. `GET /api/health` reports exactly which part is wrong.
 
 ---
+
+## Setting up Supabase
+
+1. Create a project at [supabase.com](https://supabase.com).
+
+2. **SQL Editor -> run `supabase/schema.sql`.** This creates the tables,
+   indexes, Row Level Security policies, the storage bucket, and the stock
+   reservation functions. It is idempotent, so re-running it is safe.
+
+3. **SQL Editor -> run `supabase/seed.sql`** to load the demo catalog: 21
+   categories, 63 brands, 293 products. Regenerate it any time with
+   `npm run seed:sql`. Also idempotent - every statement upserts on its slug.
+
+4. **Project Settings -> API** gives you three values for `.env.local`:
+
+   ```ini
+   NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon / public key>
+   SUPABASE_SERVICE_ROLE_KEY=<service_role key — server only>
+   ```
+
+5. Set the admin variables too:
+
+   ```ini
+   ADMIN_EMAIL=you@example.com
+   ADMIN_PASSWORD=<a real password>
+   ADMIN_SESSION_SECRET=<long random string>
+   ```
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+   ```
+
+6. `npm run dev`, then `npm run test:e2e` in a second terminal. That runs 73
+   end-to-end checks against your project and is the fastest way to confirm the
+   whole stack works before deploying.
+
+### Signing in
+
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` is the owner account. It is checked **first**
+and always works, so you can reach the admin panel on a fresh deployment before
+any Supabase Auth user exists.
+
+Additional staff accounts are created in **Admin -> Admin Users**. Those live in
+Supabase Auth and also need a row in the `admins` table - the app creates both
+together. Because access needs both, revoking someone is a single row delete.
 
 ## What the owner can do without touching code
 
@@ -342,9 +334,7 @@ npm run start            # run the production build
 npm run typecheck        # TypeScript, no emit
 npm run lint             # ESLint
 npm run test:e2e         # 63-check regression suite against a running server
-npm run seed -- --force  # reset the demo data (stop the server first)
-npm run seed:sql         # regenerate supabase/seed.sql
-npm run export:turso     # dump the local database as SQL for Turso/libSQL
+npm run seed:sql         # regenerate supabase/seed.sql from the demo catalog
 ```
 
 `npm run test:e2e` drives a running server the way a browser would — storefront
@@ -356,61 +346,37 @@ terminal.
 
 ## Deploying
 
-The right host depends on one thing: **whether the filesystem is writable.**
+Any Node host works, including serverless ones - the app keeps no local state,
+so a read-only filesystem is fine.
 
-### Serverless (Vercel, Netlify) — use a hosted database
+1. Push the repository and import it on your host.
+2. Set the six environment variables from `.env.example`.
+   On Vercel these apply **per environment**: tick Production, Preview *and*
+   Development. A variable scoped to Production only leaves preview builds with
+   nothing, which is a common cause of a preview deployment failing while
+   production works.
+3. Deploy. Environment variables do not reach a build that has already run, so
+   after changing them use **Redeploy**.
 
-Their project directories are read-only, so the built-in SQLite file cannot be
-created and the app will refuse to start. Point it at a hosted libSQL database
-instead — free, and unlike a paused Postgres project it stays awake:
-
-1. Create a database at [turso.tech](https://turso.tech) and copy its URL and
-   auth token.
-2. In your host's environment variables, set:
-   ```ini
-   TURSO_DATABASE_URL=libsql://your-db-name.turso.io
-   TURSO_AUTH_TOKEN=your-token
-   ADMIN_SESSION_SECRET=<a long random string>
-   ADMIN_EMAIL=you@example.com
-   ADMIN_PASSWORD=<a real password>
-   ```
-   Generate the secret with:
-   ```bash
-   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-   ```
-3. Deploy. The catalog seeds itself into the hosted database on first boot.
-
-The catalog seeds itself into an empty Turso database on first boot, so there is
-usually nothing to import. If you have already edited products, prices or
-settings locally and want that work rather than the demo data:
-
-```bash
-npm run export:turso              # writes turso-export.sql
-npm run export:turso -- --catalog # catalog only, no orders or admin accounts
-
-turso db shell <your-db-name> < turso-export.sql
-```
-
-The export is idempotent — loading it twice does not duplicate anything — and
-`turso-export.sql` is gitignored because a full export contains customer names,
-phone numbers and addresses. Delete it once the import finishes.
-
-Supabase works the same way — set the three `SUPABASE_*` variables after running
-`supabase/schema.sql`, and it takes precedence over libSQL.
-
-### A host with a real disk — nothing to configure
-
-Railway, Fly.io, Render with a disk, a VPS, or a Raspberry Pi in the shop: the
-local SQLite file works as-is. Set `ADMIN_SESSION_SECRET`, `ADMIN_EMAIL` and
-`ADMIN_PASSWORD`, and make sure `.data/` is on persistent storage rather than a
-container layer that is wiped on redeploy.
+Builds never contact the database. If the project is unreachable at build time
+the shop chrome falls back to packaged defaults and the build still succeeds -
+a database outage should not be able to block a deployment.
 
 ### If it fails to start
 
-The server log names the exact problem and the variables to set. A generic
-"Application error: a server-side exception has occurred" in the browser with no
-detail means the log is where to look — Vercel shows it under the deployment's
-Functions tab.
+Open `/api/health`. It reports which variables are present (presence only,
+never values), whether the project is reachable, and how many products it can
+see. It returns 503 with the cause when something is wrong, so it is safe to
+share when asking for help.
+
+Common answers:
+
+| Health says | Fix |
+|---|---|
+| `Supabase is not configured` | Variables missing for that environment; add them and redeploy |
+| Cannot reach the project | Free projects pause after inactivity - open the dashboard to resume |
+| `relation ... does not exist` | `supabase/schema.sql` has not been run |
+| `productCount: 0` | Schema is there but `supabase/seed.sql` has not been run |
 
 ---
 

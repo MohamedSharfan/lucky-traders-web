@@ -56,7 +56,7 @@ export function AdminShell({
   children: React.ReactNode;
   adminName: string;
   shopName: string;
-  storeKind: 'local' | 'sqlite' | 'supabase';
+  storeKind: 'supabase';
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -131,12 +131,7 @@ export function AdminShell({
           Signed in as <span className="font-semibold text-white">{adminName}</span>
         </p>
         <p className="mb-2 px-3 text-[11px] text-white/45">
-          Data source:{' '}
-          {storeKind === 'supabase'
-            ? 'Supabase'
-            : storeKind === 'sqlite'
-              ? 'Local SQLite file'
-              : 'Local JSON file'}
+          Data source: Supabase
         </p>
         <Link
           href="/"

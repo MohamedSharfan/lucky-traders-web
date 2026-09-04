@@ -3,24 +3,20 @@ import 'server-only';
 import type { DataStore } from './types';
 
 /**
- * Picks the datastore for this deployment.
+ * Resolves the datastore.
  *
- *   1. Supabase   - when a project URL and key are present.
- *   2. SQLite     - the default. One file in `.data/`, free forever, no server
- *                   to keep awake and nothing that can be paused.
- *   3. JSON store - only if SQLite cannot load (for example a machine with no
- *                   prebuilt binary available). Same data, simpler engine.
+ * Supabase is the only backend. There is deliberately no local or in-memory
+ * fallback: a shop that quietly serves a different database than the one it was
+ * pointed at would accept orders the owner never sees, which is worse than not
+ * serving at all.
  */
+
 export function isSupabaseConfigured(): boolean {
   return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
+      (process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim()),
   );
-}
-
-/** Set DATA_BACKEND=json to force the plain-file store. */
-function forcedBackend(): string {
-  return (process.env.DATA_BACKEND ?? '').trim().toLowerCase();
 }
 
 let resolved: DataStore | null = null;
@@ -28,55 +24,15 @@ let resolved: DataStore | null = null;
 export async function getDb(): Promise<DataStore> {
   if (resolved) return resolved;
 
-  const forced = forcedBackend();
-
-  if (forced !== 'json' && forced !== 'sqlite' && isSupabaseConfigured()) {
-    const { supabaseStore } = await import('./supabase');
-    resolved = supabaseStore;
-    return resolved;
+  if (!isSupabaseConfigured()) {
+    const { SupabaseNotConfiguredError } = await import('./errors');
+    const error = new SupabaseNotConfiguredError();
+    console.error(`\n[db] ${error.message}\n`);
+    throw error;
   }
 
-  if (forced === 'json') {
-    const { localStore } = await import('./local');
-    resolved = localStore;
-    return resolved;
-  }
-
-  try {
-    const { sqliteStore } = await import('./sqlite');
-    // Touching the store here surfaces a problem now, while we can still react,
-    // rather than on the first customer's page view.
-    await sqliteStore.getSettings();
-    resolved = sqliteStore;
-  } catch (error) {
-    const { isConfigurationError } = await import('./errors');
-
-    // A read-only filesystem defeats the JSON store too, so falling back would
-    // only swap one unexplained crash for another. Surface the real problem —
-    // the message names the exact environment variables to set.
-    if (isConfigurationError(error)) {
-      console.error(`\n[db] ${(error as Error).message}\n`);
-      throw error;
-    }
-
-    // When a hosted database was explicitly configured, there is no safe
-    // fallback: quietly serving a different store would write the shop's
-    // orders somewhere the owner is not looking.
-    if (process.env.TURSO_DATABASE_URL?.trim()) {
-      console.error('[db] The configured hosted database could not be opened.', error);
-      throw error;
-    }
-
-    // Anything else (for example a machine with no prebuilt libSQL binary) is
-    // genuinely recoverable: the JSON store holds the same data.
-    console.error(
-      '[db] SQLite is unavailable, falling back to the JSON store. Set DATA_BACKEND=json to silence this.',
-      error,
-    );
-    const { localStore } = await import('./local');
-    resolved = localStore;
-  }
-
+  const { supabaseStore } = await import('./supabase');
+  resolved = supabaseStore;
   return resolved;
 }
 

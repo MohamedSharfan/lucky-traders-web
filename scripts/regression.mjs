@@ -5,8 +5,8 @@
  *
  * Exercises the running server exactly as a browser would: storefront routes,
  * multilingual search, filters, checkout with stock reservation, the whole
- * admin surface, and the auth guards. Backend-agnostic, so the same run proves
- * SQLite, the JSON store or Supabase.
+ * admin surface, and the auth guards. Point it at a dev server or a deployed
+ * URL; either way it proves the Supabase project behind it.
  */
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';

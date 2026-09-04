@@ -19,17 +19,20 @@ import type {
   Settings,
 } from '@/lib/types';
 import type { DataStore } from './types';
+import { DatabaseUnreachableError } from './errors';
 import {
   DEFAULT_PAGE_SIZE,
   assertNoCategoryCycle,
+  buildSlugBase,
+  computeStats,
   formatOrderNumber,
   orderTotals,
+  resolveDeliveryFee,
   sanitizeProductWrite,
   searchTerms,
   slugify,
   toProductView,
 } from './shared';
-import { buildSlugBase, computeStats, resolveDeliveryFee } from './local';
 
 /**
  * Supabase-backed datastore.
@@ -54,8 +57,37 @@ export function serviceClient(): SupabaseClient {
 
 const now = () => new Date().toISOString();
 
+/**
+ * Recognises failures that mean "this deployment is misconfigured" rather than
+ * "that particular query was wrong".
+ *
+ * A paused project, a wrong URL, a rotated key and a schema that was never
+ * created all surface here as ordinary query errors. Reporting them as such
+ * hides the real problem behind an opaque digest, so they are re-thrown as a
+ * configuration error whose message says what to fix.
+ */
+function asConfigurationFailure(message: string): DatabaseUnreachableError | null {
+  const patterns = [
+    /fetch failed/i,
+    /ENOTFOUND|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN/i,
+    /getaddrinfo/i,
+    // PostgREST: the table does not exist, i.e. schema.sql was never run.
+    /relation .* does not exist/i,
+    /Could not find the table/i,
+    /schema cache/i,
+    // Auth against the project itself.
+    /JWT|Invalid API key|invalid signature/i,
+    /project.*paused/i,
+  ];
+  return patterns.some((p) => p.test(message)) ? new DatabaseUnreachableError(message) : null;
+}
+
 function unwrap<T>(res: { data: T | null; error: { message: string } | null }): T {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) {
+    const configFailure = asConfigurationFailure(res.error.message);
+    if (configFailure) throw configFailure;
+    throw new Error(res.error.message);
+  }
   return res.data as T;
 }
 
@@ -191,8 +223,8 @@ export const supabaseStore: DataStore = {
       // `search_text` is a generated column holding name + si + ta + sku +
       // description, so one ILIKE covers all three languages (see schema.sql).
       // Brand and category names live in other tables, so they are resolved to
-      // ids first and folded into the same OR - matching the SQLite adapter,
-      // where "araliya" or "rice & grains" find products too.
+      // ids first and folded into the same OR, so "araliya" or "rice & grains"
+      // find products just as a product name does.
       const term = query.search.replace(/[%,()]/g, ' ').trim();
       if (term) {
         const pattern = `%${term}%`;
