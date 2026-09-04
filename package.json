@@ -11,7 +11,8 @@
     "seed": "node scripts/seed-local.mjs",
     "seed:sql": "node scripts/generate-sql.mjs",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "node scripts/regression.mjs"
+    "test:e2e": "node scripts/regression.mjs",
+    "export:turso": "node scripts/export-turso.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

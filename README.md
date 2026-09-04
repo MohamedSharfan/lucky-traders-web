@@ -344,6 +344,7 @@ npm run lint             # ESLint
 npm run test:e2e         # 63-check regression suite against a running server
 npm run seed -- --force  # reset the demo data (stop the server first)
 npm run seed:sql         # regenerate supabase/seed.sql
+npm run export:turso     # dump the local database as SQL for Turso/libSQL
 ```
 
 `npm run test:e2e` drives a running server the way a browser would — storefront
@@ -378,6 +379,21 @@ instead — free, and unlike a paused Postgres project it stays awake:
    node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
    ```
 3. Deploy. The catalog seeds itself into the hosted database on first boot.
+
+The catalog seeds itself into an empty Turso database on first boot, so there is
+usually nothing to import. If you have already edited products, prices or
+settings locally and want that work rather than the demo data:
+
+```bash
+npm run export:turso              # writes turso-export.sql
+npm run export:turso -- --catalog # catalog only, no orders or admin accounts
+
+turso db shell <your-db-name> < turso-export.sql
+```
+
+The export is idempotent — loading it twice does not duplicate anything — and
+`turso-export.sql` is gitignored because a full export contains customer names,
+phone numbers and addresses. Delete it once the import finishes.
 
 Supabase works the same way — set the three `SUPABASE_*` variables after running
 `supabase/schema.sql`, and it takes precedence over libSQL.
