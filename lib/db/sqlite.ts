@@ -162,15 +162,14 @@ async function seedIfEmpty(db: Client): Promise<void> {
     args: [],
   });
 
-  // One transaction, so a failure part-way leaves no half-built catalog.
-  const tx = await db.transaction('write');
-  try {
-    for (const statement of statements) await tx.execute(statement);
-    await tx.commit();
-  } catch (error) {
-    await tx.rollback();
-    throw error;
-  }
+  // One batch, not one statement at a time.
+  //
+  // batch() ships every statement in a single request and applies them
+  // atomically, so a failure part-way still leaves no half-built catalog.
+  // Executing them individually costs a network round trip each: ~480 of them
+  // against a hosted database is well over ten seconds, which exceeds a
+  // serverless function's time limit long before the catalog finishes loading.
+  await db.batch(statements, 'write');
 
   console.log(
     `[sqlite] seeded ${categories.length} categories, ${brands.length} brands, ${products.length} products`,
