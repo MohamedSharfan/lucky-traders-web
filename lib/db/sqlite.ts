@@ -31,7 +31,7 @@ import {
   toProductView,
 } from './shared';
 import { MIGRATION_STATEMENTS, SCHEMA_STATEMENTS } from './sqlite-schema';
-import { StorageUnavailableError } from './errors';
+import { DatabaseUnreachableError, StorageUnavailableError } from './errors';
 import { computeStats, resolveDeliveryFee } from './local';
 
 /**
@@ -87,7 +87,12 @@ async function connect(): Promise<Client> {
       const message = error instanceof Error ? error.message : String(error);
       // libSQL reports an unwritable file as ConnectionFailed rather than a
       // filesystem error, so match on that too.
-      if (!remoteUrl && /ConnectionFailed|unable to open|readonly|EROFS|EACCES/i.test(message)) {
+      if (remoteUrl) {
+        // A hosted database that will not open is always a configuration
+        // problem - a bad URL, or a token that has been rotated or revoked.
+        throw new DatabaseUnreachableError(remoteUrl, message);
+      }
+      if (/ConnectionFailed|unable to open|readonly|EROFS|EACCES/i.test(message)) {
         throw new StorageUnavailableError(`cannot open ${DB_FILE} (${message})`);
       }
       throw error;

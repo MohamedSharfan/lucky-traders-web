@@ -38,6 +38,44 @@ export class StorageUnavailableError extends Error {
   }
 }
 
+/**
+ * Raised when a hosted database is configured but cannot be reached.
+ *
+ * This must never fall back to a local store: the operator asked for a specific
+ * database, and quietly writing the shop's orders somewhere else would lose
+ * them. Failing loudly is the only safe behaviour.
+ */
+export class DatabaseUnreachableError extends Error {
+  readonly isConfigurationError = true;
+
+  constructor(url: string, cause: string) {
+    // Only the host is echoed back, never the full URL or the token.
+    let host = 'the configured database';
+    try {
+      host = new URL(url).host;
+    } catch {
+      /* keep the generic label */
+    }
+
+    super(
+      [
+        `Could not connect to ${host}.`,
+        '',
+        `Cause: ${cause}`,
+        '',
+        'Check that:',
+        '  - TURSO_DATABASE_URL is the full URL, starting with libsql://',
+        '  - TURSO_AUTH_TOKEN is current and has not been revoked or rotated',
+        '  - the database still exists and is not paused',
+        '',
+        'The app will not fall back to local storage here: orders written to the',
+        'wrong database would be lost.',
+      ].join('\n'),
+    );
+    this.name = 'DatabaseUnreachableError';
+  }
+}
+
 /** True when the error means "the app is misconfigured", not "a query failed". */
 export function isConfigurationError(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'isConfigurationError' in error);

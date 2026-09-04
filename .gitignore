@@ -11,3 +11,7 @@ next-env.d.ts
 # Database exports: these contain customer names, phone numbers,
 # addresses and hashed admin passwords.
 turso-export.sql
+*.db
+*.sqlite
+*.sqlite3
+admin-session-secret.txt

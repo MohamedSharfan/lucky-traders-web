@@ -59,6 +59,14 @@ export async function getDb(): Promise<DataStore> {
       throw error;
     }
 
+    // When a hosted database was explicitly configured, there is no safe
+    // fallback: quietly serving a different store would write the shop's
+    // orders somewhere the owner is not looking.
+    if (process.env.TURSO_DATABASE_URL?.trim()) {
+      console.error('[db] The configured hosted database could not be opened.', error);
+      throw error;
+    }
+
     // Anything else (for example a machine with no prebuilt libSQL binary) is
     // genuinely recoverable: the JSON store holds the same data.
     console.error(
