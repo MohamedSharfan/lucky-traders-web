@@ -9,6 +9,7 @@ import { cn, formatPrice } from '@/lib/format';
 import { useToast } from '@/components/ui/Toast';
 import type { Brand, Category, Product, Settings } from '@/lib/types';
 import { GalleryUploader } from './GalleryUploader';
+import { SelectOrCreate } from './SelectOrCreate';
 import { ImageUploader } from './ImageUploader';
 import { AlertIcon, TrashIcon } from '@/components/ui/Icon';
 
@@ -34,10 +35,21 @@ interface Props {
   settings: Settings;
 }
 
-export function ProductForm({ product, categories, brands, settings }: Props) {
+export function ProductForm({
+  product,
+  categories: initialCategories,
+  brands: initialBrands,
+  settings,
+}: Props) {
   const router = useRouter();
   const toast = useToast();
   const isEdit = Boolean(product);
+
+  // Categories and brands can be created from inside this form, so the lists
+  // are local state rather than props: a new brand has to appear in its own
+  // dropdown immediately, without a page reload that would lose the form.
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
+  const [brands, setBrands] = useState<Brand[]>(initialBrands);
 
   const roots = useMemo(() => categories.filter((c) => !c.parent_id), [categories]);
 
@@ -232,58 +244,56 @@ export function ProductForm({ product, categories, brands, settings }: Props) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="category_id" className="label">
-                Category <span className="text-brand-red">*</span>
-              </label>
-              <select
+              <SelectOrCreate
                 id="category_id"
-                className={field('category_id')}
+                label="Category"
+                endpoint="/api/categories"
+                options={roots}
                 value={form.category_id}
-                onChange={(e) => {
-                  set('category_id', e.target.value);
+                onChange={(value) => {
+                  set('category_id', value);
                   set('subcategory_id', '');
                 }}
-              >
-                <option value="">Choose a category…</option>
-                {roots.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
+                onCreated={(created) => {
+                  setCategories((prev) => [...prev, created as Category]);
+                  set('subcategory_id', '');
+                }}
+                placeholder="Choose a category…"
+                addLabel="Frozen Foods"
+                required
+                invalid={Boolean(errors.category_id)}
+              />
               {errors.category_id && <p className="field-error">{errors.category_id}</p>}
             </div>
 
-            <div>
-              <label htmlFor="subcategory_id" className="label">Subcategory</label>
-              <select
-                id="subcategory_id"
-                className="input"
-                value={form.subcategory_id}
-                onChange={(e) => set('subcategory_id', e.target.value)}
-                disabled={!subcategories.length}
-              >
-                <option value="">
-                  {subcategories.length ? 'None' : 'No subcategories for this category'}
-                </option>
-                {subcategories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-            </div>
+            <SelectOrCreate
+              id="subcategory_id"
+              label="Subcategory"
+              endpoint="/api/categories"
+              // A subcategory is only meaningful under a parent, so the chosen
+              // category is sent with it.
+              payload={{ parent_id: form.category_id }}
+              options={subcategories}
+              value={form.subcategory_id}
+              onChange={(value) => set('subcategory_id', value)}
+              onCreated={(created) => setCategories((prev) => [...prev, created as Category])}
+              placeholder={subcategories.length ? 'None' : 'No subcategories yet'}
+              addLabel="Basmati Rice"
+              disabled={!form.category_id}
+              disabledHint="Choose a category first."
+            />
 
-            <div>
-              <label htmlFor="brand_id" className="label">Brand</label>
-              <select
-                id="brand_id"
-                className="input"
-                value={form.brand_id}
-                onChange={(e) => set('brand_id', e.target.value)}
-              >
-                <option value="">No brand</option>
-                {brands.map((brand) => (
-                  <option key={brand.id} value={brand.id}>{brand.name}</option>
-                ))}
-              </select>
-            </div>
+            <SelectOrCreate
+              id="brand_id"
+              label="Brand"
+              endpoint="/api/brands"
+              options={brands}
+              value={form.brand_id}
+              onChange={(value) => set('brand_id', value)}
+              onCreated={(created) => setBrands((prev) => [...prev, created as Brand])}
+              placeholder="No brand"
+              addLabel="Araliya"
+            />
 
             <div>
               <label htmlFor="sku" className="label">SKU</label>

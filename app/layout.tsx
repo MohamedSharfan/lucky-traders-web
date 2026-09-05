@@ -60,11 +60,17 @@ async function loadShell(): Promise<{ settings: Settings; categories: Category[]
     const [settings, categories] = await Promise.all([db.getSettings(), db.listCategories()]);
     return { settings, categories };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    // Next aborts prerendering with its own error the first time a route reads
+    // uncached data; that is how a page opts into being dynamic, not a fault.
+    // Reporting it as an outage would make every deploy look broken.
+    const optingIntoDynamic = /Dynamic server usage|DYNAMIC_SERVER_USAGE/i.test(message);
+    if (!optingIntoDynamic) {
+      console.error('[layout] Falling back to default shop details; the database is unreachable.', message);
+    }
+
     const { defaultSettings } = await import('@/data/build-catalog.mjs');
-    console.error(
-      '[layout] Falling back to default shop details; the database is unreachable.',
-      error instanceof Error ? error.message : error,
-    );
     return { settings: defaultSettings as Settings, categories: [] };
   }
 }

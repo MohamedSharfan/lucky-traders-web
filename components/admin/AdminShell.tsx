@@ -34,7 +34,7 @@ import {
 const NAV = [
   { href: '/admin', label: 'Dashboard', icon: SettingsIcon, exact: true },
   { href: '/admin/products', label: 'Products', icon: BoxIcon },
-  { href: '/admin/categories', label: 'Categories', icon: GridIcon },
+  { href: '/admin/categories', label: 'Categories & Brands', icon: GridIcon },
   { href: '/admin/orders', label: 'Orders', icon: ListIcon },
   { href: '/admin/customers', label: 'Customers', icon: UsersIcon },
   { href: '/admin/offers', label: 'Offers', icon: TagIcon },

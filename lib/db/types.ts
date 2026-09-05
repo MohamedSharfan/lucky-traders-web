@@ -33,6 +33,15 @@ export interface DataStore {
   deleteCategory(id: string): Promise<void>;
 
   listBrands(): Promise<Brand[]>;
+  /**
+   * Creates a brand, or returns the existing one when the name already maps to
+   * the same slug. New stock arrives from new suppliers constantly, so this is
+   * called from the product form itself; erroring on a duplicate would just
+   * block someone who typed a brand they already had.
+   */
+  createBrand(input: { name: string }): Promise<Brand>;
+  updateBrand(id: string, patch: { name?: string; is_active?: boolean }): Promise<Brand>;
+  deleteBrand(id: string): Promise<void>;
 
   queryProducts(query: ProductQuery): Promise<Paginated<ProductView>>;
   getProduct(idOrSlug: string): Promise<ProductView | null>;

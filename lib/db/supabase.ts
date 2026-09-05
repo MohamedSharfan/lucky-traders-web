@@ -194,6 +194,53 @@ export const supabaseStore: DataStore = {
     return unwrap(await sb.from('brands').select('*').order('name')) as Brand[];
   },
 
+  async createBrand({ name }) {
+    const sb = serviceClient();
+    const clean = name.trim();
+    if (clean.length < 2) throw new Error('A brand name is required');
+    const slug = slugify(clean);
+
+    // "Araliya" typed when Araliya already exists should select it, not fail.
+    // The owner is standing at the shelf adding stock; a duplicate-name error
+    // would stop them for no reason.
+    const existing = unwrap(
+      await sb.from('brands').select('*').eq('slug', slug).maybeSingle(),
+    ) as Brand | null;
+    if (existing) return existing;
+
+    return unwrap(
+      await sb.from('brands').insert({ slug, name: clean, is_active: true }).select().single(),
+    ) as Brand;
+  },
+
+  async updateBrand(id, patch) {
+    const sb = serviceClient();
+    const row: Record<string, unknown> = {};
+    if (patch.name !== undefined) {
+      const clean = patch.name.trim();
+      if (clean.length < 2) throw new Error('A brand name is required');
+      row.name = clean;
+      row.slug = slugify(clean);
+    }
+    if (patch.is_active !== undefined) row.is_active = patch.is_active;
+    if (!Object.keys(row).length) {
+      return unwrap(await sb.from('brands').select('*').eq('id', id).single()) as Brand;
+    }
+    return unwrap(await sb.from('brands').update(row).eq('id', id).select().single()) as Brand;
+  },
+
+  async deleteBrand(id) {
+    const sb = serviceClient();
+    // Products reference the brand, so deleting one in use would either fail on
+    // the foreign key or strip the brand off the shelf label. Say so plainly.
+    const used = unwrap(await sb.from('products').select('id').eq('brand_id', id).limit(1));
+    if ((used as unknown[]).length) {
+      throw new Error('This brand still has products assigned to it');
+    }
+    const res = await sb.from('brands').delete().eq('id', id);
+    if (res.error) throw new Error(res.error.message);
+  },
+
   // --------------------------------------------------------------- products
   async queryProducts(query) {
     const sb = serviceClient();

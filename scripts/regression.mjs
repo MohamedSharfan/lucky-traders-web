@@ -254,7 +254,25 @@ async function main() {
   ok(cat.ok, 'category created');
   const inUse = categories.find((c) => !c.parent_id);
   ok(!(await json(`/api/categories/${inUse.id}`, { method: 'DELETE', headers: H })).ok, 'in-use category protected from deletion');
+  const sub = await json('/api/categories', { method: 'POST', headers: H, body: JSON.stringify({ name: 'Regression Subcategory', parent_id: cat.data.id }) });
+  ok(sub.ok && sub.data.parent_id === cat.data.id, 'subcategory created under it');
+  ok((await json(`/api/categories/${sub.data.id}`, { method: 'DELETE', headers: H })).ok, 'subcategory deleted');
   ok((await json(`/api/categories/${cat.data.id}`, { method: 'DELETE', headers: H })).ok, 'category deleted');
+
+  // Brands are created from the product form, so the whole cycle has to work
+  // without ever leaving that screen.
+  const brand = await json('/api/brands', { method: 'POST', headers: H, body: JSON.stringify({ name: 'Regression Brand' }) });
+  ok(brand.ok, 'brand created');
+  const again = await json('/api/brands', { method: 'POST', headers: H, body: JSON.stringify({ name: 'regression brand' }) });
+  ok(again.ok && again.data.id === brand.data.id, 'duplicate brand name selects the existing one');
+  ok((await json('/api/brands')).data.some((b) => b.id === brand.data.id), 'brand appears in the list');
+  const renamed = await json(`/api/brands/${brand.data.id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ name: 'Regression Brand Renamed' }) });
+  ok(renamed.ok && renamed.data.name === 'Regression Brand Renamed', 'brand renamed');
+
+  // A brand in use must not vanish from the shelf labels of live products.
+  const inUseBrand = (await json('/api/products?pageSize=200')).data.items.find((p) => p.brand_id);
+  ok(!(await json(`/api/brands/${inUseBrand.brand_id}`, { method: 'DELETE', headers: H })).ok, 'in-use brand protected from deletion');
+  ok((await json(`/api/brands/${brand.data.id}`, { method: 'DELETE', headers: H })).ok, 'brand deleted');
 
   const saved = await json('/api/settings', { method: 'PUT', headers: H, body: JSON.stringify({ whatsapp: '0759998887' }) });
   ok(saved.data.whatsapp === '0759998887', 'settings saved');
@@ -266,7 +284,7 @@ async function main() {
   const guarded = [
     ['POST', '/api/products'], ['POST', '/api/products/bulk'], ['GET', '/api/orders'],
     ['PUT', '/api/settings'], ['GET', '/api/admin/users'], ['POST', '/api/upload'],
-    ['POST', '/api/categories'],
+    ['POST', '/api/categories'], ['POST', '/api/brands'],
   ];
   for (const [method, path] of guarded) {
     const res = await fetch(BASE + path, {
